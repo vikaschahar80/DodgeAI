@@ -163,7 +163,7 @@ async function main() {
   // 6. Journal Entry Items (Accounting)
   await processJsonl('journal_entry_items_accounts_receivable', (obj) => {
     const id = obj.accountingDocument;
-    const stmts = [prepareInsertNode(id, 'AccountEntry', {
+    const stmts = [prepareInsertNode(id, 'JournalEntry', {
       amount: obj.amountInCompanyCodeCurrency,
       date: obj.documentDate,
       currency: obj.companyCodeCurrency,

@@ -11,63 +11,71 @@ export async function GET(request: Request) {
       // Fetch specific nodes and their 1-hop neighborhood
       const focusNodes = focusNodesStr.split(',').map(s => s.trim());
       
-      const placeholders = focusNodes.map(() => '?').join(',');
+      // PostgreSQL uses $1, $2 for parameters
+      const placeholders = focusNodes.map((_, i) => `$${i + 1}`).join(',');
+      const secondaryPlaceholders = focusNodes.map((_, i) => `$${focusNodes.length + i + 1}`).join(',');
       
-      // Get all edges involving these nodes
-      const edgesQuery = db.prepare(`
+      const edgesQuery = `
         SELECT * FROM edges 
-        WHERE source IN (${placeholders}) OR target IN (${placeholders})
+        WHERE source IN (${placeholders}) OR target IN (${secondaryPlaceholders})
         LIMIT 500
-      `);
-      // Since prepare doesn't allow rest arguments nicely in typescript sometimes, we use `all`
-      const edges = edgesQuery.all(...focusNodes, ...focusNodes) as any[];
+      `;
+      const edgesResult = await db.query(edgesQuery, [...focusNodes, ...focusNodes]);
+      const edges = edgesResult.rows;
 
-      // Collect all node IDs from these edges + focus nodes
       const neighborIds = new Set<string>(focusNodes);
       edges.forEach(e => {
         neighborIds.add(e.source);
         neighborIds.add(e.target);
       });
 
-      const neighborPlaceholders = Array.from(neighborIds).map(() => '?').join(',');
-      const nodesQuery = db.prepare(`
-        SELECT * FROM nodes WHERE id IN (${neighborPlaceholders})
-      `);
-      const nodes = nodesQuery.all(...Array.from(neighborIds)) as any[];
+      const neighborArray = Array.from(neighborIds);
+      const neighborPlaceholders = neighborArray.map((_, i) => `$${i + 1}`).join(',');
+      const nodesResult = await db.query(
+        `SELECT * FROM nodes WHERE id IN (${neighborPlaceholders})`,
+        neighborArray
+      );
+      const nodes = nodesResult.rows;
 
       return NextResponse.json({
-        nodes: nodes.map(n => ({ id: n.id, label: n.label, ...JSON.parse(n.properties) })),
-        edges: edges.map(e => ({ source: e.source, target: e.target, label: e.type, ...JSON.parse(e.properties) }))
+        nodes: nodes.map(n => ({ id: n.id, label: n.label, ...n.properties })),
+        edges: edges.map(e => ({ source: e.source, target: e.target, label: e.type, ...e.properties }))
       });
     } else {
-      // Default: fetch a random/limited subgraph for initial view
-      const edges = db.prepare('SELECT * FROM edges LIMIT ?').all(limit) as any[];
+      // Default: fetch a random/limited subgraph
+      const edgesResult = await db.query('SELECT * FROM edges LIMIT $1', [limit]);
+      const edges = edgesResult.rows;
+
       const nodeIds = new Set<string>();
       edges.forEach(e => {
         nodeIds.add(e.source);
         nodeIds.add(e.target);
       });
-      // We also want some unconnected nodes maybe? No, edges are more interesting
-      const placeholders = Array.from(nodeIds).map(() => '?').join(',');
-      const nodes = nodeIds.size > 0 
-        ? db.prepare(`SELECT * FROM nodes WHERE id IN (${placeholders})`).all(...Array.from(nodeIds)) as any[]
-        : [];
 
-      // If db is empty, return empty
+      const nodeIdsArray = Array.from(nodeIds);
+      let nodes: any[] = [];
+      if (nodeIdsArray.length > 0) {
+        const placeholders = nodeIdsArray.map((_, i) => `$${i + 1}`).join(',');
+        const nodesResult = await db.query(`SELECT * FROM nodes WHERE id IN (${placeholders})`, nodeIdsArray);
+        nodes = nodesResult.rows;
+      }
+
       if (nodes.length === 0) {
-        const fallbackNodes = db.prepare('SELECT * FROM nodes LIMIT ?').all(Math.max(limit, 50)) as any[];
+        const fallbackResult = await db.query('SELECT * FROM nodes LIMIT $1', [Math.max(limit, 50)]);
+        const fallbackNodes = fallbackResult.rows;
         return NextResponse.json({
-          nodes: fallbackNodes.map(n => ({ id: n.id, label: n.label, ...JSON.parse(n.properties) })),
+          nodes: fallbackNodes.map(n => ({ id: n.id, label: n.label, ...n.properties })),
           edges: []
         });
       }
 
       return NextResponse.json({
-        nodes: nodes.map(n => ({ id: n.id, label: n.label, ...JSON.parse(n.properties) })),
-        edges: edges.map(e => ({ source: e.source, target: e.target, label: e.type, ...JSON.parse(e.properties) }))
+        nodes: nodes.map(n => ({ id: n.id, label: n.label, ...n.properties })),
+        edges: edges.map(e => ({ source: e.source, target: e.target, label: e.type, ...e.properties }))
       });
     }
   } catch (error: any) {
+    console.error('Graph API Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
