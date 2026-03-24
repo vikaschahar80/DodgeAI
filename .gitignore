@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data
+*.db
+*.db-shm
+*.db-wal
+sap-o2c-data
+*.zip
