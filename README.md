@@ -1,62 +1,59 @@
 # Context Graph System - SAP O2C Explorer
 
-This repository contains the solution for the Forward Deployed Engineer task: a **Graph-Based Data Modeling and Query System** that unifies fragmented SAP Order-to-Cash data and provides a natural language querying interface.
+This repository contains the solution for the **Forward Deployed Engineer** task: a Graph-Based Data Modeling and Query System that unifies fragmented SAP Order-to-Cash data and provides a natural language querying interface.
 
 ## Architecture Decisions
 
-### 1. Database and Data Modeling (Graph vs Relational)
-While specialized graph databases (like Neo4j) are powerful, they often introduce significant overhead for deployment and querying. To maximize accessibility, speed, and standard LLM compatibility, **SQLite (`better-sqlite3`) was chosen with an Explicit In-Memory Graph Schema**.
-* **Nodes Table**: `id`, `label`, `properties` (JSON)
-* **Edges Table**: `id`, `source`, `target`, `type`, `properties` (JSON)
+### 1. Database Choice: PostgreSQL (Neon)
+We migrated from a local SQLite setup to **PostgreSQL (Neon)** to ensure the application is "Edge Ready" and suitable for production deployments on platforms like Vercel. 
+- **JSONB Implementation**: We utilize PostgreSQL’s native `JSONB` type for the `properties` column in both `nodes` and `edges` tables. This allows for schema-less property storage while maintaining high-speed indexing and querying.
+- **Serverless Compatibility**: By using a connection pool (`pg`), the application handles serverless function cold-starts and connection limits efficiently.
 
-This deliberate schema design provides the best of both worlds:
-1. **True Graph Traversal**: Nodes and Edges are first-class citizens.
-2. **LLM SQL Proficiency**: Standard language models excel at writing SQL. By utilizing a simple `nodes` and `edges` table, the LLM easily generates `JOIN`s to answer complex relationship questions without hallucinating complex Cypher syntax.
+### 2. Graph Modeling
+The dataset is modeled as a property graph to capture the inherent relationships in the O2C flow:
+- **Nodes**: `Customer`, `SalesOrder`, `Delivery`, `Billing`, `JournalEntry`, `Product`.
+- **Edges**: 
+    - `Customer -[PLACES]-> SalesOrder`
+    - `SalesOrder -[CONTAINS]-> Product`
+    - `Delivery -[FULFILLS]-> SalesOrder`
+    - `Billing -[BILLS_FOR]-> Delivery/SalesOrder`
+    - `JournalEntry -[RECORDS]-> Billing`
+    - `JournalEntry -[CLEARS]-> JournalEntry` (for payments)
 
-### 2. LLM Prompting Strategy (Text-to-SQL-to-Text)
-A naive RAG implementation often struggles with graph aggregations ("Which products have the *highest number* of bills?"). Instead of vector search, we built a deterministic 2-stage prompt chain:
-* **Stage 1 (SQL & Guardrails)**: The model is instructed to act only as a SQL generator. It reads the user prompt and generates a strict JSON payload containing a SQLite query and an `isRelated` boolean.
-* **Execution (Server-Side)**: The Next.js API securely runs the SQL query against local SQLite. 
-* **Stage 2 (Synthesis)**: A fresh prompt synthesizes the exact JSON row results back into human-readable text.
-*(See `ai_prompts.md` for the exact prompt structures and logic).*
+### 3. LLM Prompting Strategy (Natural Language to SQL)
+Instead of a simple vector-based RAG, we use a **two-stage deterministic pipeline**:
+1. **Translation**: The LLM (Gemini 1.5 Flash) receives the PostgreSQL schema and translates the natural language question into a structured SQL query. This allows for complex aggregations (e.g., "highest number of billing documents") that vector search typically fails at.
+2. **Synthesis**: The results of the SQL query are fed back into the LLM to generate a grounded, human-readable answer.
 
-### 3. Guardrails Implementation
-Guardrails are built into the initial SQL generation step. By asking the LLM to output an `isRelated` flag in its JSON response, we programmatically drop queries that don't belong to the O2C domain *before* any backend database logic is triggered.
-
-### 4. Graph Visualization UI
-The visualization is built with `react-force-graph-2d` and dynamically rendered in a split-pane layout using pure, flexible Vanilla CSS to adhere to modern design aesthetics seamlessly.
+### 4. Guardrails
+Strict guardrails are implemented at the prompt level. The system is instructed to identify if a query is within the SAP O2C domain. If a user asks an off-topic question (e.g., creative writing or general knowledge), the system responds with:
+> *"This system is designed to answer questions related to the provided dataset only."*
 
 ---
 
 ## Setup & Running Locally
 
-1. **Clone the repository** and navigate to the project directory:
-   \`\`\`bash
-   cd graph-o2c-app
-   \`\`\`
-2. **Install Dependencies**:
-   \`\`\`bash
+1. **Clone the repository** and install dependencies:
+   ```bash
    npm install
-   \`\`\`
-3. **Set your Google Gemini API Key**:
-   Create a `.env.local` file in the root directory and add:
-   \`\`\`env
-   GEMINI_API_KEY=your_free_tier_key
-   \`\`\`
-4. **Ingest the Dataset**:
-   Ensure the `sap-o2c-data` folder is present at the root, then run the ingestion script. This builds the `graph.db` SQLite file locally:
-   \`\`\`bash
+   ```
+2. **Environment Variables**:
+   Create a `.env.local` file with:
+   ```env
+   GEMINI_API_KEY=your_key
+   DATABASE_URL=your_neon_postgres_url
+   ```
+3. **Ingest Data**:
+   ```bash
    npx tsx scripts/ingest.ts
-   \`\`\`
-5. **Start the Next.js Dev Server**:
-   \`\`\`bash
+   ```
+4. **Run App**:
+   ```bash
    npm run dev
-   \`\`\`
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+   ```
 
 ---
 
-## Submission Notes
-- **Working Demo**: Ensure `.env.local` is set before starting the server.
-- **AI Coding Logs**: Please see `ai_coding_session_logs.md` in this repository for a transcript of the AI iteration patterns, debugging methodologies, and code-generation flow during the build of this project.
+## Submission Details
+- **Public Repo**: [GitHub Link](https://github.com/vikaschahar80/DodgeAI.git)
+- **AI Coding Session Logs**: See `ai_coding_session_logs.md` for the full transcript of the AI-driven development process, including debugging and iteration patterns.

@@ -55,3 +55,31 @@ SqliteError: FOREIGN KEY constraint failed
    - **Step 2 ("The Grounding Formatter")**: Code dynamically executes the SQL on the backend. The output JSON rows are fed into the LLM alongside the original user query, restricting the LLM to *only* synthesize an answer derived directly from the JSON text.
 
 **Result**: Zero hallucination, strict domain adherence (graceful rejects), and deep analytical abilities on Graph topologies.
+
+---
+
+## Iteration 4: Scaling to PostgreSQL & Cloud Deployment
+
+**User Directive**: "Migrate to a cloud Postgres database (Neon) for Vercel deployment."
+
+**AI Debugging Workflow**:
+1. **Dependency Shift**: Uninstalled `better-sqlite3` and installed `pg`.
+2. **Query Refactoring**: Entirely rewrote the `db.ts` and `route.ts` layers to support PostgreSQL's `$1` parameter syntax and `JSONB` operators (`->>`).
+3. **500 Error Resolution**: Identified that the Graph API route was still using legacy SQLite `prepare().all()` calls. Refactored the API to use asynchronous `db.query()` to fix the server crash.
+
+---
+
+## Iteration 5: Data Inconsistency & Label Consolidation
+
+**Problem**: The user noted that the chat couldn't find a journal entry even though it was visible in the graph.
+
+**AI Debugging Workflow**:
+1. **Diagnostic Script**: Created a temporary `diagnose.ts` to inspect the raw database rows for the reported ID.
+2. **Root Cause Found**: The accounting documents were split between `Payment` and `AccountEntry` labels, while the AI prompt was strictly looking for `JournalEntry`.
+3. **Resolution**: Consolidated all accounting-related records under the `JournalEntry` label in `ingest.ts`.
+4. **Re-Ingestion**: Reran the ingestion script to patch the cloud database, immediately restoring full Chat functionality.
+
+---
+
+## Final Review & Submission Prep
+Successfully updated the README to reflect architectural decisions, implemented strict guardrails for off-topic prompts, and ensured the AI system prompt generates valid PostgreSQL for the complex O2C graph.

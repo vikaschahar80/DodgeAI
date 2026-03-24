@@ -22,7 +22,7 @@ Valid Graph Edge Patterns (Source -> Target):
 - Customer [OWES]-> JournalEntry
 - JournalEntry [CLEARS]-> JournalEntry
 
-IMPORTANT GUARDRAIL: We only answer questions about this dataset. If a query is completely unrelated to orders, bills, payments, deliveries, plants, customers, or products, set "isRelated" to false.
+IMPORTANT GUARDRAIL: We only answer questions about this dataset. If a query is completely unrelated to orders, bills, payments, deliveries, plants, customers, or products, or involves general knowledge or creative writing, set "isRelated" to false and return the message "This system is designed to answer questions related to the provided dataset only." in your response.
 
 EXAMPLE QUERIES:
 Q: Which products are associated with the highest number of billing documents?
