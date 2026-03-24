@@ -67,7 +67,6 @@ Respond ONLY with valid JSON.
     if (responseText.startsWith('\`\`\`json')) responseText = responseText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '');
     
     const parsed = JSON.parse(responseText);
-    console.log('AI Generated SQL:', parsed.sql);
 
     if (!parsed.isRelated) {
       return NextResponse.json({ 
@@ -82,7 +81,6 @@ Respond ONLY with valid JSON.
       if (parsed.sql) {
         const result = await db.query(parsed.sql);
         dataResult = result.rows;
-        console.log('SQL Result Data:', JSON.stringify(dataResult));
       }
     } catch (e: any) {
       console.error('SQL Execution Error:', e);
