@@ -181,7 +181,7 @@ async function main() {
   // 7. Payments
   await processJsonl('payments_accounts_receivable', (obj) => {
     const id = obj.accountingDocument;
-    const stmts = [prepareInsertNode(id, 'Payment', {
+    const stmts = [prepareInsertNode(id, 'JournalEntry', {
       amount: obj.amountInCompanyCodeCurrency,
       date: obj.documentDate,
       currency: obj.companyCodeCurrency
